@@ -935,7 +935,7 @@ const TODAY_TEMPLATE=[
   {title:'饮食', cat:'life', subs:[
     {title:'早餐：一个玉米 + 2 个鸡蛋 + 燕麦奶 + 8 颗红枣'},
     {title:'午餐：茄辣西（一个茄子 + 一个圆椒 + 一个西红柿 + 2 个鸡蛋）+ 0.7kg 西瓜'},
-    {title:'晚餐'}
+    {title:'晚餐：不吃晚饭（300ml 牛奶替代）'}
   ]},
   {title:'落地运用 xuan 酱教学视频内容（Obsidian 应用）', cat:'study'},
   {title:'定制 LLM Wiki 知识库迭代系统（基于 Karpathy 理论）', cat:'study'},
@@ -969,7 +969,7 @@ const TOMORROW_TEMPLATE=[
   {title:'阅读打卡（≥30 分钟）', cat:'study'},
   {title:'早餐（营养均衡）', cat:'life'},
   {title:'午餐（蛋白质优先）', cat:'life'},
-  {title:'晚餐', cat:'life'},
+  {title:'晚餐：不吃晚饭（牛奶替代）', cat:'life'},
   {title:'饮水：目标 2L', cat:'life'},
   {title:'运动', cat:'life', subs:[
     {title:'舒缓运动 30 分钟（散步/拉伸/瑜伽）'},
@@ -989,12 +989,33 @@ function buildTemplateItem(t){
   if(t.subs&&t.subs.length){ o.subs=t.subs.map(s=>({title:s.title, done:!!s.done, doneAt:s.done?nowStamp():null})); o.done=o.subs.every(s=>s.done); o.doneAt=o.done?nowStamp():null; }
   return o;
 }
+const TODAY_TEMPLATE_VERSION='2026-08-06-v2';
 function ensureTodayTemplate(){
   if(TODAY_TEMPLATE_DATE!==todayStr()) return; // 模板只对标记的日期生效
   const a=getTodos();
-  if(a.some(t=>t.tpl===TODAY_TEMPLATE_DATE)) return; // 当天已注入，幂等
-  a.push(...TODAY_TEMPLATE.map(buildTemplateItem));
-  saveTodos(a);
+  // 1) 当天未注入 → 全量注入
+  if(!a.some(t=>t.tpl===TODAY_TEMPLATE_DATE)){
+    a.push(...TODAY_TEMPLATE.map(buildTemplateItem));
+    saveTodos(a);
+  }
+  // 2) 模板版本升级 → 补齐式同步：模板里有、今天没有的同名项补进来（不覆盖/不删除用户手改项）
+  const applied=Store.get('tplApplied',{});
+  if(applied[TODAY_TEMPLATE_DATE]!==TODAY_TEMPLATE_VERSION){
+    let changed=false;
+    TODAY_TEMPLATE.forEach(t=>{
+      const ex=a.find(x=>x.date===todayStr() && x.title===t.title);
+      if(!ex){ a.push(buildTemplateItem(t)); changed=true; }
+      else if(t.subs&&t.subs.length){
+        // 清理空标题子项（旧模板遗留的空「晚餐」），再补缺失子项
+        if((ex.subs||[]).some(x=>!x.title)){ ex.subs=(ex.subs||[]).filter(x=>x.title); changed=true; }
+        const have=(ex.subs||[]).map(x=>x.title);
+        t.subs.forEach(x=>{ if(have.indexOf(x.title)<0){ ex.subs=ex.subs||[]; ex.subs.push({title:x.title,done:false,doneAt:null}); changed=true; } });
+      }
+    });
+    if(changed) saveTodos(a);
+    applied[TODAY_TEMPLATE_DATE]=TODAY_TEMPLATE_VERSION;
+    Store.set('tplApplied',applied);
+  }
 }
 /* ===== 任务生命周期：归档 + 按需顺延 + 历史重复清理 ===== */
 function getTodosArchive(){ return Store.get('todosArchive',[]); }

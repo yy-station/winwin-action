@@ -941,24 +941,19 @@ let tpCalMonth=new Date().getMonth();
 let tpCalYear=new Date().getFullYear();
 
 /* ===== 每日清单模板（WorkBuddy 按对话汇报每天更新；TODAY_TEMPLATE_DATE 为适用日期）===== */
-const TODAY_TEMPLATE_DATE='2026-08-06';
+const TODAY_TEMPLATE_DATE='2026-08-06'; // 兼容保留（不再用于日期门控）
+/* 固定习惯模板：不再逐日改；当日具体事项走「对话+Obsidian」由 Codex 管理 */
 const TODAY_TEMPLATE=[
-  {title:'饮食', cat:'life', subs:[
-    {title:'早餐：一个玉米 + 2 个鸡蛋 + 燕麦奶 + 8 颗红枣'},
-    {title:'午餐：茄辣西（一个茄子 + 一个圆椒 + 一个西红柿 + 2 个鸡蛋）+ 0.7kg 西瓜'},
-    {title:'晚餐：不吃晚饭（300ml 牛奶替代）'}
-  ]},
-  {title:'落地运用 xuan 酱教学视频内容（Obsidian 应用）', cat:'study'},
-  {title:'定制 LLM Wiki 知识库迭代系统（基于 Karpathy 理论）', cat:'study'},
-  {title:'在 Codex 中维护 Horizon AI 采集系统（巡检）', cat:'work'},
-  {title:'看完陈悠秀 Codex 完整教程', cat:'study', done:true},
-  {title:'在 Codex 启动求职相关咨询实践', cat:'work'},
-  {title:'一篇小红书文章定稿', cat:'work'},
-  {title:'拍八虚', cat:'exercise', done:true},
-  {title:'开窗通风', cat:'life', done:true},
-  {title:'剪手指甲 + 指甲护理', cat:'life', done:true},
-  {title:'看小鱼讲解《宫》23集', cat:'fun', done:true},
+  {title:'求职：固定 1.5h（投简历/面试准备/求职咨询）', cat:'work'},
+  {title:'公考常识：1 条', cat:'study'},
+  {title:'多邻国英语打卡', cat:'study'},
+  {title:'阅读打卡（≥30 分钟）', cat:'study'},
   {title:'饮水：目标 2L', cat:'life'},
+  {title:'饮食', cat:'life', subs:[
+    {title:'早餐：营养均衡'},
+    {title:'午餐：蛋白质优先'},
+    {title:'晚餐：不吃晚饭（牛奶替代）'}
+  ]},
   {title:'运动', cat:'exercise', subs:[
     {title:'舒缓运动 30 分钟（散步/拉伸）'},
     {title:'电脑间隙欧阳春晓瘦背操'}
@@ -967,28 +962,11 @@ const TODAY_TEMPLATE=[
     {title:'敷面膜'},
     {title:'涂身体乳'}
   ]},
-  {title:'多邻国英语打卡', cat:'study'},
-  {title:'阅读打卡（≥30 分钟）·《沧浪之水》第45章', cat:'study', done:true}
+  {title:'23:30 前睡觉', cat:'life'}
 ];
-/* 明日模板（今天打开今日计划时，明天 Tab 就能看到；date 强制为 tomorrow） */
-const TOMORROW_TEMPLATE_DATE='2026-08-07';
-const TOMORROW_TEMPLATE=[
-  {title:'定制 LLM Wiki 知识库迭代系统（推进）', cat:'study'},
-  {title:'在 Codex 中维护 Horizon AI 采集系统（巡检）', cat:'work'},
-  {title:'一篇小红书文章定稿', cat:'work'},
-  {title:'在 Codex 启动求职相关咨询实践（继续）', cat:'work'},
-  {title:'多邻国英语打卡', cat:'study'},
-  {title:'阅读打卡（≥30 分钟）', cat:'study'},
-  {title:'早餐（营养均衡）', cat:'life'},
-  {title:'午餐（蛋白质优先）', cat:'life'},
-  {title:'晚餐：不吃晚饭（牛奶替代）', cat:'life'},
-  {title:'饮水：目标 2L', cat:'life'},
-  {title:'运动', cat:'life', subs:[
-    {title:'舒缓运动 30 分钟（散步/拉伸/瑜伽）'},
-    {title:'电脑间隙欧阳春晓瘦背操'}
-  ]},
-  {title:'护肤：基础护肤', cat:'life'}
-];
+const TOMORROW_TEMPLATE_DATE='2026-08-07'; // 兼容保留（不再用于日期门控）
+const TOMORROW_TEMPLATE=TODAY_TEMPLATE; // 固定习惯与今日相同（每日自动注入明天）
+
 /* 周一固定家务（自动追加；只注入到今天=周一的清单；周二~周日不出现） */
 const WEEKLY_HABITS_MONDAY=[
   {title:'家务：拖地', cat:'life'},
@@ -1001,62 +979,53 @@ function buildTemplateItem(t){
   if(t.subs&&t.subs.length){ o.subs=t.subs.map(s=>({title:s.title, done:!!s.done, doneAt:s.done?nowStamp():null})); o.done=o.subs.every(s=>s.done); o.doneAt=o.done?nowStamp():null; }
   return o;
 }
-const TODAY_TEMPLATE_VERSION='2026-08-06-v4';
+const TODAY_TEMPLATE_VERSION='2026-08-06-v5'; // 习惯模板版本：改习惯时 +1
 /* 子项前缀种类（用于 早餐/午餐/晚餐 等子项对齐） */
 function subKind(title){ const m=title.match(/^(早餐|午餐|晚餐)/); return m?m[1]:''; }
 function ensureTodayTemplate(){
-  if(TODAY_TEMPLATE_DATE!==todayStr()) return; // 模板只对标记的日期生效
+  const today=todayStr();
   const a=getTodos();
-  // 1) 当天未注入 → 全量注入
-  if(!a.some(t=>t.tpl===TODAY_TEMPLATE_DATE)){
-    a.push(...TODAY_TEMPLATE.map(buildTemplateItem));
-    saveTodos(a);
-  }
-  // 2) 模板版本升级 → 补齐式同步：模板里有、今天没有的同名项补进来（不覆盖/不删除用户手改项）
   const applied=Store.get('tplApplied',{});
-  if(applied[TODAY_TEMPLATE_DATE]!==TODAY_TEMPLATE_VERSION){
-    let changed=false;
-    const today=todayStr();
-    // 0) 同类规范化：把「同一种类」的旧条目合并成模板的规范条目（保留完成状态）
-    //    例：阅读打卡 / 阅读《书》第X章 / 阅读打卡·《书》 → 一条
-    const kinds=[{re:/^阅读/, tpl:t=>/^阅读/.test(t.title)}];
-    kinds.forEach(k=>{
-      const olds=a.filter(x=>x.date===today && k.re.test(x.title));
-      if(olds.length===0) return;
-      const tplItem=TODAY_TEMPLATE.find(k.tpl);
-      const anyDone=olds.some(x=>x.done);
-      const anyDoneAt=olds.map(x=>x.doneAt).find(Boolean)||null;
-      olds.forEach(x=>a.splice(a.indexOf(x),1));
-      if(tplItem && !a.some(x=>x.date===today && x.title===tplItem.title)){
-        const it=buildTemplateItem(tplItem);
-        it.done=anyDone; it.doneAt=anyDone?anyDoneAt:null;
-        a.push(it);
-      }
-      changed=true;
-    });
-    // 1) 模板项补齐；子项按「前缀种类」对齐（早餐/午餐/晚餐 等），保留完成状态
-    TODAY_TEMPLATE.forEach(t=>{
-      const ex=a.find(x=>x.date===today && x.title===t.title);
-      if(!ex){ a.push(buildTemplateItem(t)); changed=true; }
-      else if(t.subs&&t.subs.length){
-        if((ex.subs||[]).some(x=>!x.title)){ ex.subs=(ex.subs||[]).filter(x=>x.title); changed=true; }
-        t.subs.forEach(ts=>{
-          if((ex.subs||[]).some(x=>x.title===ts.title)) return; // 已有完全一致
-          const kind=subKind(ts.title);
-          const idx=kind ? (ex.subs||[]).findIndex(x=>x.title && subKind(x.title)===kind) : -1;
-          if(idx>=0){ ex.subs[idx].title=ts.title; changed=true; } // 旧标题替换为新标题（保留 done）
-          else { ex.subs=ex.subs||[]; ex.subs.push({title:ts.title,done:false,doneAt:null}); changed=true; }
-        });
-      }
-    });
-    // 2) 精确重名去重（同标题多条 → 合并保留一条，done 取并集）
-    const seen={};
-    a.forEach(x=>{ if(x.date!==today) return; if(seen[x.title]){ seen[x.title].done=seen[x.title].done||x.done; a.splice(a.indexOf(x),1); changed=true; } else seen[x.title]=x; });
-    if(changed) saveTodos(a);
-    applied[TODAY_TEMPLATE_DATE]=TODAY_TEMPLATE_VERSION;
-    Store.set('tplApplied',applied);
-  }
+  const key='day-'+today;
+  if(applied[key]===TODAY_TEMPLATE_VERSION) return; // 当天已按当前版本处理，幂等
+  let changed=false;
+  // 0) 同类规范化：把「同一种类」的旧条目合并成模板的规范条目（保留完成状态）
+  const kinds=[{re:/^阅读/, tpl:t=>/^阅读/.test(t.title)}];
+  kinds.forEach(k=>{
+    const olds=a.filter(x=>x.date===today && k.re.test(x.title));
+    if(olds.length===0) return;
+    const tplItem=TODAY_TEMPLATE.find(k.tpl);
+    const anyDone=olds.some(x=>x.done);
+    const anyDoneAt=olds.map(x=>x.doneAt).find(Boolean)||null;
+    olds.forEach(x=>a.splice(a.indexOf(x),1));
+    if(tplItem && !a.some(x=>x.date===today && x.title===tplItem.title)){
+      const it=buildTemplateItem(tplItem); it.done=anyDone; it.doneAt=anyDone?anyDoneAt:null; a.push(it);
+    }
+    changed=true;
+  });
+  // 1) 固定习惯补齐：模板里有、今天没有的同名项补进来（不删用户手改项）
+  TODAY_TEMPLATE.forEach(t=>{
+    const ex=a.find(x=>x.date===today && x.title===t.title);
+    if(!ex){ a.push(buildTemplateItem(t)); changed=true; }
+    else if(t.subs&&t.subs.length){
+      if((ex.subs||[]).some(x=>!x.title)){ ex.subs=(ex.subs||[]).filter(x=>x.title); changed=true; }
+      t.subs.forEach(ts=>{
+        if((ex.subs||[]).some(x=>x.title===ts.title)) return;
+        const kind=subKind(ts.title);
+        const idx=kind ? (ex.subs||[]).findIndex(x=>x.title && subKind(x.title)===kind) : -1;
+        if(idx>=0){ ex.subs[idx].title=ts.title; changed=true; } // 旧标题替换为新标题（保留 done）
+        else { ex.subs=ex.subs||[]; ex.subs.push({title:ts.title,done:false,doneAt:null}); changed=true; }
+      });
+    }
+  });
+  // 2) 精确重名去重（同标题多条 → 合并保留一条，done 取并集）
+  const seen={};
+  a.forEach(x=>{ if(x.date!==today) return; if(seen[x.title]){ seen[x.title].done=seen[x.title].done||x.done; a.splice(a.indexOf(x),1); changed=true; } else seen[x.title]=x; });
+  if(changed) saveTodos(a);
+  applied[key]=TODAY_TEMPLATE_VERSION;
+  Store.set('tplApplied',applied);
 }
+
 /* ===== 任务生命周期：归档 + 按需顺延 + 历史重复清理 ===== */
 function getTodosArchive(){ return Store.get('todosArchive',[]); }
 function saveTodosArchive(arr){ Store.set('todosArchive',arr); }
@@ -1287,17 +1256,23 @@ function ensureWeeklyHabits(){
   saveTodos(a);
 }
 /* 明日模板：今天打开今日计划时同步注入到 tomorrow（让「明天」Tab 立即可预览；date=tomorrow，过期自动顺延规则不影响）。幂等。 */
+const TOMORROW_TEMPLATE_VERSION='2026-08-07-v1';
 function ensureTomorrowTemplate(){
   const tomorrow=dateAdd(todayStr(),1);
-  if(TOMORROW_TEMPLATE_DATE!==tomorrow) return; // 模板日期≠明天，不注入
-  const a=getTodos(), mark='tmpl-tmw-'+TOMORROW_TEMPLATE_DATE;
-  if(a.some(t=>t.tpl===mark)) return;
+  const a=getTodos(), mark='tmpl-tmw-'+tomorrow;
+  const applied=Store.get('tplApplied',{});
+  const key='tmw-'+tomorrow;
+  if(applied[key]===TOMORROW_TEMPLATE_VERSION) return; // 版本幂等
+  // 移除旧模板来源的明日项，再注入新版固定习惯（模板来源=可安全替换；用户手改项保留）
+  const rest=a.filter(t=>t.tpl!==mark);
   TOMORROW_TEMPLATE.forEach(t=>{
     const o={id:uid(), title:t.title, date:tomorrow, time:'', cat:t.cat||'work', pri:t.pri||'mid', rep:t.rep||'none', done:false, doneAt:null, subs:[], tpl:mark, created:Date.now()};
-    if(t.subs&&t.subs.length){ o.subs=t.subs.map(s=>({title:s.title, done:false, doneAt:null})); o.done=false; o.doneAt=null; }
-    a.push(o);
+    if(t.subs&&t.subs.length){ o.subs=t.subs.map(x=>({title:x.title, done:false, doneAt:null})); }
+    rest.push(o);
   });
-  saveTodos(a);
+  saveTodos(rest);
+  applied[key]=TOMORROW_TEMPLATE_VERSION;
+  Store.set('tplApplied',applied);
 }
 
 function getTodos(){ return Store.get('todos',[]); }

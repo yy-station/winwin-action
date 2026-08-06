@@ -133,7 +133,11 @@ const ENSURE_TODAY_CHECKIN_DONE=[false,false,false,true,false,false,false,false]
 /* 今日计划已完成项自动勾选（按关键词模糊匹配，标记 done=true + doneAt；WorkBuddy 每日基于对话汇报更新）
    注意：① 早餐/护肤通过饮食+护肤父任务的子项标识，correctTodayItems 直接精确控制；② 饮水不在内（视用户当日实际完成情况手动勾选，避免误标） */
 const ENSURE_TODAY_DONE_DATE='2026-08-06';
-const ENSURE_TODAY_DONE_INJECTIONS=[];
+const ENSURE_TODAY_DONE_INJECTIONS=[
+  {kw:'饮食', subKw:'晚餐'},
+  {kw:'运动', subKw:'欧阳春晓'},
+  {kw:'在 Codex 启动求职相关咨询实践'}
+];
 function ensureTodayDoneOverride(){
   if(ENSURE_TODAY_DONE_DATE!==todayStr()) return; // 仅对标记日期生效
   const a=getTodos();
@@ -141,12 +145,19 @@ function ensureTodayDoneOverride(){
   // 天然幂等：已 done 的项不重复处理
   ENSURE_TODAY_DONE_INJECTIONS.forEach(ov=>{
     a.forEach(t=>{
-      if(t.date===todayStr() && !t.done && t.title && t.title.indexOf(ov.kw)>=0){
-        t.done=true;
-        t.doneAt=nowStamp();
-        if(t.subs&&t.subs.length){
-          t.subs.forEach(s=>{ if(!s.done){ s.done=true; s.doneAt=nowStamp(); } });
+      if(t.date!==todayStr() || !t.title || t.title.indexOf(ov.kw)<0) return;
+      if(ov.subKw){
+        // 只勾指定子项；子项全完成后父项才算完成
+        let subChanged=false;
+        (t.subs||[]).forEach(s=>{ if(!s.done && s.title && s.title.indexOf(ov.subKw)>=0){ s.done=true; s.doneAt=nowStamp(); subChanged=true; } });
+        if(subChanged){
+          t.done=(t.subs||[]).length>0 && (t.subs||[]).every(s=>s.done);
+          t.doneAt=t.done?nowStamp():t.doneAt;
+          changed=true;
         }
+      } else if(!t.done){
+        t.done=true; t.doneAt=nowStamp();
+        if(t.subs&&t.subs.length){ t.subs.forEach(s=>{ if(!s.done){ s.done=true; s.doneAt=nowStamp(); } }); }
         changed=true;
       }
     });
@@ -965,6 +976,7 @@ const TOMORROW_TEMPLATE=[
   {title:'定制 LLM Wiki 知识库迭代系统（推进）', cat:'study'},
   {title:'在 Codex 中维护 Horizon AI 采集系统（巡检）', cat:'work'},
   {title:'一篇小红书文章定稿', cat:'work'},
+  {title:'在 Codex 启动求职相关咨询实践（继续）', cat:'work'},
   {title:'多邻国英语打卡', cat:'study'},
   {title:'阅读打卡（≥30 分钟）', cat:'study'},
   {title:'早餐（营养均衡）', cat:'life'},
@@ -989,11 +1001,9 @@ function buildTemplateItem(t){
   if(t.subs&&t.subs.length){ o.subs=t.subs.map(s=>({title:s.title, done:!!s.done, doneAt:s.done?nowStamp():null})); o.done=o.subs.every(s=>s.done); o.doneAt=o.done?nowStamp():null; }
   return o;
 }
-const TODAY_TEMPLATE_VERSION='2026-08-06-v3';
-/* 同类合并规则：模板升级时，把同类型的旧条目合并成一条（例：阅读打卡 + 阅读《书》第X章 → 一条） */
-const TEMPLATE_MERGE_RULES=[
-  {a:/^阅读打卡/, b:/^阅读《/, make:(ta,tb)=>'阅读打卡（≥30 分钟）·'+tb}
-];
+const TODAY_TEMPLATE_VERSION='2026-08-06-v4';
+/* 子项前缀种类（用于 早餐/午餐/晚餐 等子项对齐） */
+function subKind(title){ const m=title.match(/^(早餐|午餐|晚餐)/); return m?m[1]:''; }
 function ensureTodayTemplate(){
   if(TODAY_TEMPLATE_DATE!==todayStr()) return; // 模板只对标记的日期生效
   const a=getTodos();
@@ -1006,28 +1016,42 @@ function ensureTodayTemplate(){
   const applied=Store.get('tplApplied',{});
   if(applied[TODAY_TEMPLATE_DATE]!==TODAY_TEMPLATE_VERSION){
     let changed=false;
-    // 0) 同类合并（先合并再补缺，避免出现重复）
-    TEMPLATE_MERGE_RULES.forEach(r=>{
-      const A=a.find(x=>x.date===todayStr() && r.a.test(x.title));
-      const B=a.find(x=>x.date===todayStr() && r.b.test(x.title));
-      if(A&&B&&A!==B){
-        B.title=r.make(A.title,B.title);
-        B.done=!!(A.done||B.done);
-        B.doneAt=B.doneAt||A.doneAt||null;
-        a.splice(a.indexOf(A),1);
-        changed=true;
+    const today=todayStr();
+    // 0) 同类规范化：把「同一种类」的旧条目合并成模板的规范条目（保留完成状态）
+    //    例：阅读打卡 / 阅读《书》第X章 / 阅读打卡·《书》 → 一条
+    const kinds=[{re:/^阅读/, tpl:t=>/^阅读/.test(t.title)}];
+    kinds.forEach(k=>{
+      const olds=a.filter(x=>x.date===today && k.re.test(x.title));
+      if(olds.length===0) return;
+      const tplItem=TODAY_TEMPLATE.find(k.tpl);
+      const anyDone=olds.some(x=>x.done);
+      const anyDoneAt=olds.map(x=>x.doneAt).find(Boolean)||null;
+      olds.forEach(x=>a.splice(a.indexOf(x),1));
+      if(tplItem && !a.some(x=>x.date===today && x.title===tplItem.title)){
+        const it=buildTemplateItem(tplItem);
+        it.done=anyDone; it.doneAt=anyDone?anyDoneAt:null;
+        a.push(it);
       }
+      changed=true;
     });
+    // 1) 模板项补齐；子项按「前缀种类」对齐（早餐/午餐/晚餐 等），保留完成状态
     TODAY_TEMPLATE.forEach(t=>{
-      const ex=a.find(x=>x.date===todayStr() && x.title===t.title);
+      const ex=a.find(x=>x.date===today && x.title===t.title);
       if(!ex){ a.push(buildTemplateItem(t)); changed=true; }
       else if(t.subs&&t.subs.length){
-        // 清理空标题子项（旧模板遗留的空「晚餐」），再补缺失子项
         if((ex.subs||[]).some(x=>!x.title)){ ex.subs=(ex.subs||[]).filter(x=>x.title); changed=true; }
-        const have=(ex.subs||[]).map(x=>x.title);
-        t.subs.forEach(x=>{ if(have.indexOf(x.title)<0){ ex.subs=ex.subs||[]; ex.subs.push({title:x.title,done:false,doneAt:null}); changed=true; } });
+        t.subs.forEach(ts=>{
+          if((ex.subs||[]).some(x=>x.title===ts.title)) return; // 已有完全一致
+          const kind=subKind(ts.title);
+          const idx=kind ? (ex.subs||[]).findIndex(x=>x.title && subKind(x.title)===kind) : -1;
+          if(idx>=0){ ex.subs[idx].title=ts.title; changed=true; } // 旧标题替换为新标题（保留 done）
+          else { ex.subs=ex.subs||[]; ex.subs.push({title:ts.title,done:false,doneAt:null}); changed=true; }
+        });
       }
     });
+    // 2) 精确重名去重（同标题多条 → 合并保留一条，done 取并集）
+    const seen={};
+    a.forEach(x=>{ if(x.date!==today) return; if(seen[x.title]){ seen[x.title].done=seen[x.title].done||x.done; a.splice(a.indexOf(x),1); changed=true; } else seen[x.title]=x; });
     if(changed) saveTodos(a);
     applied[TODAY_TEMPLATE_DATE]=TODAY_TEMPLATE_VERSION;
     Store.set('tplApplied',applied);

@@ -957,8 +957,7 @@ const TODAY_TEMPLATE=[
     {title:'涂身体乳'}
   ]},
   {title:'多邻国英语打卡', cat:'study'},
-  {title:'阅读打卡（≥30 分钟）', cat:'study'},
-  {title:'阅读《沧浪之水》第45章', cat:'study', done:true}
+  {title:'阅读打卡（≥30 分钟）·《沧浪之水》第45章', cat:'study', done:true}
 ];
 /* 明日模板（今天打开今日计划时，明天 Tab 就能看到；date 强制为 tomorrow） */
 const TOMORROW_TEMPLATE_DATE='2026-08-07';

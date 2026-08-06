@@ -989,7 +989,11 @@ function buildTemplateItem(t){
   if(t.subs&&t.subs.length){ o.subs=t.subs.map(s=>({title:s.title, done:!!s.done, doneAt:s.done?nowStamp():null})); o.done=o.subs.every(s=>s.done); o.doneAt=o.done?nowStamp():null; }
   return o;
 }
-const TODAY_TEMPLATE_VERSION='2026-08-06-v2';
+const TODAY_TEMPLATE_VERSION='2026-08-06-v3';
+/* 同类合并规则：模板升级时，把同类型的旧条目合并成一条（例：阅读打卡 + 阅读《书》第X章 → 一条） */
+const TEMPLATE_MERGE_RULES=[
+  {a:/^阅读打卡/, b:/^阅读《/, make:(ta,tb)=>'阅读打卡（≥30 分钟）·'+tb}
+];
 function ensureTodayTemplate(){
   if(TODAY_TEMPLATE_DATE!==todayStr()) return; // 模板只对标记的日期生效
   const a=getTodos();
@@ -1002,6 +1006,18 @@ function ensureTodayTemplate(){
   const applied=Store.get('tplApplied',{});
   if(applied[TODAY_TEMPLATE_DATE]!==TODAY_TEMPLATE_VERSION){
     let changed=false;
+    // 0) 同类合并（先合并再补缺，避免出现重复）
+    TEMPLATE_MERGE_RULES.forEach(r=>{
+      const A=a.find(x=>x.date===todayStr() && r.a.test(x.title));
+      const B=a.find(x=>x.date===todayStr() && r.b.test(x.title));
+      if(A&&B&&A!==B){
+        B.title=r.make(A.title,B.title);
+        B.done=!!(A.done||B.done);
+        B.doneAt=B.doneAt||A.doneAt||null;
+        a.splice(a.indexOf(A),1);
+        changed=true;
+      }
+    });
     TODAY_TEMPLATE.forEach(t=>{
       const ex=a.find(x=>x.date===todayStr() && x.title===t.title);
       if(!ex){ a.push(buildTemplateItem(t)); changed=true; }

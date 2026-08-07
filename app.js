@@ -945,7 +945,6 @@ const TODAY_TEMPLATE_DATE='2026-08-06'; // 兼容保留（不再用于日期门�
 /* 固定习惯模板：不再逐日改；当日具体事项走「对话+Obsidian」由 Codex 管理 */
 const TODAY_TEMPLATE=[
   {title:'求职：固定 1.5h（投简历/面试准备/求职咨询）', cat:'work'},
-  {title:'公考常识：1 条', cat:'study'},
   {title:'多邻国英语打卡', cat:'study'},
   {title:'阅读打卡（≥30 分钟）', cat:'study'},
   {title:'饮水：目标 2L', cat:'life'},
@@ -979,7 +978,7 @@ function buildTemplateItem(t){
   if(t.subs&&t.subs.length){ o.subs=t.subs.map(s=>({title:s.title, done:!!s.done, doneAt:s.done?nowStamp():null})); o.done=o.subs.every(s=>s.done); o.doneAt=o.done?nowStamp():null; }
   return o;
 }
-const TODAY_TEMPLATE_VERSION='2026-08-06-v5'; // 习惯模板版本：改习惯时 +1
+const TODAY_TEMPLATE_VERSION='2026-08-06-v6'; // 习惯模板版本：改习惯时 +1
 /* 子项前缀种类（用于 早餐/午餐/晚餐 等子项对齐） */
 function subKind(title){ const m=title.match(/^(早餐|午餐|晚餐)/); return m?m[1]:''; }
 function ensureTodayTemplate(){

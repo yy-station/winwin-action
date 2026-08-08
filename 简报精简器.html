@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>简报精简器 · winwin</title>
+<style>
+:root{--bg:#FAF9FD;--card:#fff;--t1:#332E44;--t2:#5A5470;--t3:#8E87A4;--lav:#9B94B8;--lav2:#7E759E;--rose:#C48A96;--sage:#7FB38A;--gold:#C4A24A;--bd:#EAE6F3;--r:16px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"PingFang SC","SF Pro Rounded",sans-serif;background:linear-gradient(145deg,#FAF9FD,#F2EFF8 55%,#EAE5F3);color:var(--t1);padding:16px;max-width:760px;margin:0 auto;min-height:100vh}
+h1{font-size:20px;font-weight:800}
+.sub{color:var(--t3);font-size:12.5px;margin:4px 0 12px;line-height:1.7}
+.card{background:var(--card);border-radius:var(--r);box-shadow:0 6px 20px rgba(51,46,68,.07);padding:14px;margin-bottom:12px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{font-family:inherit;border:none;border-radius:12px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;background:#EDE8F7;color:var(--lav2)}
+button.primary{background:var(--lav2);color:#fff}
+button.danger{background:var(--rose);color:#fff}
+button:disabled{opacity:.4;cursor:not-allowed}
+.stat{font-size:12.5px;color:var(--t3);margin-top:8px}
+.item{display:flex;align-items:flex-start;gap:8px;padding:9px 8px;border-radius:12px;background:#F6F4FB;margin-bottom:6px;border-left:3px solid var(--lav)}
+.item .tt{flex:1;font-size:13.5px;font-weight:600;line-height:1.5}
+.item .sc{color:var(--gold);font-weight:700;font-size:12px;white-space:nowrap;margin-top:2px}
+.item .del{background:none;color:var(--rose);font-size:17px;padding:0 4px;font-weight:800;border-radius:8px}
+.item .del:hover{background:#F5DEE3}
+.item.orphan{border-left-color:var(--rose)}
+.item.removed{opacity:.35;background:#F1EEF5;border-left-color:#C4BED6}
+.item.removed .tt{text-decoration:line-through}
+.sec{font-size:13px;font-weight:800;color:var(--t2);margin:12px 0 8px;display:flex;justify-content:space-between;align-items:center}
+.hint{font-size:12px;color:var(--t3);background:#EDEAF5;border-radius:10px;padding:8px 10px;margin-top:8px;line-height:1.7}
+.drop{border:2px dashed var(--bd);border-radius:14px;padding:22px;text-align:center;color:var(--t3);font-size:13px;cursor:pointer;transition:all .2s}
+.drop:hover,.drop.over{border-color:var(--lav2);background:#F6F4FB}
+textarea{display:none}
+</style>
+</head>
+<body>
+<h1>📰 简报精简器</h1>
+<div class="sub">读取 Horizon 简报 md → 总览删标题 = 连同下面展开内容一起删；自动检测「总览已删但详情还在」的孤儿；保存后下载/写回文件。</div>
+
+<div class="card">
+  <div class="drop" id="drop">点击选择 / 拖入 <b>horizon-YYYY-MM-DD-zh.md</b><br><span style="font-size:12px">（文件在 Obsidian：00_资源库/05_复盘日记/10_每日复盘/每日简报/）</span></div>
+  <input type="file" id="file" accept=".md,text/markdown" style="display:none">
+</div>
+
+<div class="card" id="work" style="display:none">
+  <div class="bar">
+    <button class="primary" id="save">💾 保存精简版</button>
+    <button id="undo">↩ 撤销</button>
+    <button id="clearall" class="danger">🗑 清空已删</button>
+  </div>
+  <div class="stat" id="stat"></div>
+  <div id="list"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let ORIG="", ITEMS=[], DELETED=[], UNDO=[];
+const norm=t=>t.replace(/\s+/g,' ').replace(/^#+/,'').trim();
+
+function parse(md){
+  const lines=md.split('\n');
+  const ov={}; // title -> {line, score}
+  const detail={}; // title -> {start,end,score}
+  for(let i=0;i<lines.length;i++){
+    const l=lines[i];
+    let m=l.match(/^\s*\d+\.\s*\[(.+?)\]\(#.+?\)\s*⭐️?\s*([\d.]+)\/10/);
+    if(m){ ov[norm(m[1])]={line:i,score:m[2]}; continue; }
+    m=l.match(/^###\s*\[(.+?)\]\(.+?\)\s*⭐️?\s*([\d.]+)\/10/);
+    if(m){
+      const t=norm(m[1]);
+      if(!detail[t]) detail[t]={start:i,end:i,score:m[2]};
+      continue;
+    }
+    // 记录 detail 结束（下一个 ### 前 / --- 前 / 文件尾）
+    for(const t in detail){ const d=detail[t]; if(d.end===d.start && d.start<i) d.end=i; }
+  }
+  // 修正 end：detail 的 end 指到下一个 ### 或文件尾；把 end 前进到块尾（含标签行）
+  const ds=Object.values(detail).sort((a,b)=>a.start-b.start);
+  ds.forEach((d,idx)=>{
+    const nextStart=idx+1<ds.length?ds[idx+1].start:lines.length;
+    d.end=nextStart;
+  });
+  // 组装 items：以 overview 为准，匹配 detail
+  const items=[];
+  for(const t in ov){
+    const d=detail[t];
+    items.push({title:t, score:ov[t].score, ovLine:ov[t].line, detail:d?{start:d.start,end:d.end}:null});
+  }
+  // 孤儿：detail 有但 overview 没有
+  const orphans=[];
+  for(const t in detail){ if(!ov[t]) orphans.push({title:t, score:detail[t].score, ovLine:-1, detail:{start:detail[t].start,end:detail[t].end}}); }
+  return {items, orphans, lines};
+}
+
+function render(){
+  const keep=ITEMS.length, del=DELETED.length, orph=ORPHANS.length;
+  $('stat').textContent=`保留 ${keep} 条 · 已删 ${del} 条 · 孤儿详情 ${orph} 条（总览已删但内容还在）`;
+  let h='';
+  if(orph>0){
+    h+='<div class="sec">⚠️ 孤儿详情（总览已删，内容还在）</div>';
+    ORPHANS.forEach((it,i)=>{
+      h+=`<div class="item orphan"><div class="tt">${esc(it.title)}</div><div class="sc">⭐${it.score}</div><button class="del" onclick="delOrphan(${i})">✕</button></div>`;
+    });
+  }
+  h+='<div class="sec">📋 总览（点 ✕ = 标题和展开内容一起删）</div>';
+  ITEMS.forEach((it,i)=>{
+    h+=`<div class="item"><div class="tt">${esc(it.title)}</div><div class="sc">⭐${it.score}</div><button class="del" onclick="delItem(${i})">✕</button></div>`;
+  });
+  h+='<div class="sec" style="color:var(--t3)">🗑 已删除（可撤销）</div>';
+  DELETED.forEach((it,i)=>{
+    h+=`<div class="item removed"><div class="tt">${esc(it.title)}</div><div class="sc">⭐${it.score}</div><button class="del" onclick="restore(${i})">↩</button></div>`;
+  });
+  $('list').innerHTML=h;
+}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function delItem(i){ UNDO.push({type:'del',i,item:ITEMS[i]}); DELETED.push(ITEMS[i]); ITEMS.splice(i,1); render(); }
+function delOrphan(i){ UNDO.push({type:'orphan',i,item:ORPHANS[i]}); DELETED.push(ORPHANS[i]); ORPHANS.splice(i,1); render(); }
+function restore(i){ const it=DELETED[i]; DELETED.splice(i,1); if(it.ovLine>=0) ITEMS.push(it); else ORPHANS.push(it); render(); }
+function undo(){ const u=UNDO.pop(); if(!u) return; if(u.type==='del'){ ITEMS.splice(u.i,0,u.item); } else if(u.type==='orphan'){ ORPHANS.splice(u.i,0,u.item); } const d=DELETED.indexOf(u.item); if(d>=0) DELETED.splice(d,1); render(); }
+$('undo').onclick=undo;
+
+function buildOutput(){
+  const lines=ORIG.split('\n');
+  const keepOv=new Set(ITEMS.map(it=>it.ovLine));          // 保留这些总览行
+  const delDetail=new Set(DELETED.filter(it=>it.detail).map(it=>it.detail.start)); // 删除这些详情块
+  const out=[];
+  for(let i=0;i<lines.length;i++){
+    const l=lines[i];
+    if(/^\s*\d+\.\s*\[.+?\]\(#.+?\)/.test(l)){      // 总览行：仅保留未删的
+      if(keepOv.has(i)) out.push(l);
+      continue;
+    }
+    if(delDetail.has(i)){                                   // 删除的详情块整体跳过
+      const it=DELETED.find(x=>x.detail&&x.detail.start===i);
+      let j=it?it.detail.end:i;
+      while(j<lines.length && lines[j].trim()==='') j++;
+      i=j-1; continue;
+    }
+    out.push(l);
+  }
+  return out.join('\n');
+}
+function save(){
+  const md=buildOutput();
+  if(window.showSaveFilePicker){
+    showSaveFilePicker({suggestedName:'精简_'+($('file').files[0]?$('file').files[0].name:'简报.md'),types:[{description:'Markdown',accept:{'text/markdown':['.md']}}]})
+      .then(fh=>fh.createWritable().then(w=>w.write(md).then(()=>w.close())).then(()=>alert('✅ 已保存')))
+      .catch(()=>download(md));
+  } else download(md);
+}
+function download(md){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([md],{type:'text/markdown'}));
+  a.download='精简_简报.md'; a.click();
+  alert('已下载，请替换回 Obsidian 原文件');
+}
+$('save').onclick=save;
+$('clearall').onclick=()=>{ UNDO.push({type:'clear'}); DELETED=[]; render(); };
+
+function loadFile(file){
+  const r=new FileReader();
+  r.onload=e=>{
+    ORIG=e.target.result;
+    const P=parse(ORIG);
+    ITEMS=P.items; ORPHANS=P.orphans; DELETED=[]; UNDO=[];
+    $('work').style.display='block';
+    $('drop').innerHTML=`已加载：<b>${file.name}</b>（保留 ${ITEMS.length} 条 · 孤儿 ${ORPHANS.length} 条）<br><span style="font-size:12px">点这里重新选择文件</span>`;
+    render();
+  };
+  r.readAsText(file,'utf-8');
+}
+$('file').onchange=e=>{ if(e.target.files[0]) loadFile(e.target.files[0]); };
+$('drop').onclick=()=>$('file').click();
+$('drop').ondragover=e=>{e.preventDefault();$('drop').classList.add('over');};
+$('drop').ondragleave=()=>$('drop').classList.remove('over');
+$('drop').ondrop=e=>{e.preventDefault();$('drop').classList.remove('over'); if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);};
+</script>
+</body>
+</html>

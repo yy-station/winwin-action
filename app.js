@@ -97,6 +97,7 @@ const NAV = [
   { group:'总览', items:[
     {id:'dashboard', label:'首页仪表盘', icon:'🏠'},
     {id:'todayPlan', label:'今日计划', icon:'📋'},
+    {id:'scheduled', label:'已安排任务', icon:'📅'},
   ]},
   { group:'工作', items:[
     {id:'career', label:'职业发展', icon:'🎯'},
@@ -732,6 +733,7 @@ function go(page){
   // post-render hooks
   if(page==='dashboard')startClock();
   if(page==='todayPlan'){ attachTodoModals(); if(tpCalOpen) renderTodoCal(); }
+  if(page==='scheduled') renderScheduledList();
 }
 function toggleHhdDate(i, ds){
   const dc=Store.get('dailyCheckin',{});
@@ -2564,6 +2566,56 @@ function saveReview(){
   // brief feedback
   const btn=event.target;btn.textContent='✅ 已保存';btn.style.background='var(--sage)';
   setTimeout(()=>{btn.textContent='保存今日复盘';btn.style.background=''},1500);
+}
+
+/* ===== 已安排任务（固定·按时间排序）===== */
+const SCHEDULED_TASKS=[
+  {time:'10:00', name:'Horizon AI 新闻雷达', desc:'每日更新（自动化）', tag:'自动'},
+  {time:'11:00', name:'WorkBuddy 积分补领', desc:'每日领取（自动化）', tag:'自动'},
+  {time:'每日', name:'多邻国打卡', desc:'英语 + 生词', tag:'习惯'},
+  {time:'每日', name:'阅读 ≥30 分钟', desc:'《沧浪之水》推进', tag:'习惯'},
+  {time:'每日', name:'阅读并精简每日简报', desc:'保留有用内容→归档', tag:'习惯'},
+  {time:'每日', name:'运动（舒缓/瘦背操）', desc:'身体是长期本钱', tag:'习惯'},
+  {time:'23:30', name:'睡觉', desc:'23:30 前入睡', tag:'节律'},
+];
+function _schedTime(t){ if(/^\d{1,2}:\d{2}$/.test(t)){ const [h,m]=t.split(':').map(Number); return h*60+m; } return t==='每日'?-1:9999; }
+function toggleScheduled(idx){
+  const today=todayStr();
+  const dc=Store.get('scheduledDone',{});
+  dc[today]=dc[today]||[];
+  const i=dc[today].indexOf(idx);
+  if(i>=0) dc[today].splice(i,1); else dc[today].push(idx);
+  Store.set('scheduledDone',dc);
+  renderScheduledList();
+}
+function renderScheduledList(){
+  const today=todayStr();
+  const done=Store.get('scheduledDone',{})[today]||[];
+  const el=document.getElementById('schedList'); if(!el) return;
+  const tasks=[...SCHEDULED_TASKS].sort((a,b)=>_schedTime(a.time)-_schedTime(b.time));
+  el.innerHTML=tasks.map((t,i)=>{
+    const isDone=done.indexOf(i)>=0;
+    const tagc=t.tag==='自动'?'#6A8FC0':(t.tag==='节律'?'#7E759E':'#7FB38A');
+    return `<div class="item" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;background:#F6F4FB;margin-bottom:8px;border-left:4px solid ${isDone?'#7FB38A':'#C4BED6'};opacity:${isDone?0.55:1}">
+      <div style="min-width:52px;text-align:center;background:#EDE8F7;border-radius:10px;padding:4px 8px;font-size:12px;font-weight:800;color:#7E759E">${t.time}</div>
+      <div style="flex:1"><div style="font-weight:700;font-size:14px;text-decoration:${isDone?'line-through':'none'}">${t.name}</div><div style="font-size:12px;color:#8E87A4">${t.desc}</div></div>
+      <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:${tagc}22;color:${tagc}">${t.tag}</span>
+      <button onclick="toggleScheduled(${i})" style="width:34px;height:34px;border-radius:50%;background:${isDone?'#7FB38A':'#fff'};color:${isDone?'#fff':'#8E87A4'};font-size:16px;font-weight:800;border:2px solid ${isDone?'#7FB38A':'#C4BED6'}">${isDone?'✓':''}</button>
+    </div>`;
+  }).join('');
+}
+PAGES.scheduled=function(){
+  const today=todayStr();
+  const done=(Store.get('scheduledDone',{})[today]||[]).length;
+  return `<div class="sec">
+    <div class="card"><div class="card-title"><span class="ico">📅</span>已安排任务 <span class="card-sub">${done}/${SCHEDULED_TASKS.length} 已完成</span></div>
+      <div style="font-size:12px;color:#8E87A4;margin-bottom:10px;line-height:1.7">固定任务按时间排序（自动任务由 Codex/launchd 执行，习惯任务每日勾选）。点击右侧圆点勾选完成。</div>
+      <div id="schedList"></div>
+    </div>
+    <div class="card"><div class="card-title"><span class="ico">💡</span>说明</div>
+      <div style="font-size:12.5px;color:#5A5470;line-height:1.9">自动任务：Horizon 10:00 / WorkBuddy 11:00 由定时任务自动跑，这里做展示；习惯任务：每日打卡后点 ✓。完成情况每晚收工由 Codex 汇总进复盘。</div>
+    </div>
+  </div>`;
 }
 
 /* ===== 404 ===== */

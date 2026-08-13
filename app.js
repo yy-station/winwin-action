@@ -2569,14 +2569,10 @@ function saveReview(){
 }
 
 /* ===== 已安排任务（固定·按时间排序）===== */
+/* 已安排任务 = 仅自动化/固定定时任务；每日习惯（多邻国/阅读/简报/运动/睡觉）在「今日计划」与每日打卡里记，不重复列 */
 const SCHEDULED_TASKS=[
-  {time:'10:00', name:'Horizon AI 新闻雷达', desc:'每日更新（自动化）', tag:'自动'},
-  {time:'11:00', name:'WorkBuddy 积分补领', desc:'每日领取（自动化）', tag:'自动'},
-  {time:'每日', name:'多邻国打卡', desc:'英语 + 生词', tag:'习惯'},
-  {time:'每日', name:'阅读 ≥30 分钟', desc:'《沧浪之水》推进', tag:'习惯'},
-  {time:'每日', name:'阅读并精简每日简报', desc:'保留有用内容→归档', tag:'习惯'},
-  {time:'每日', name:'运动（舒缓/瘦背操）', desc:'身体是长期本钱', tag:'习惯'},
-  {time:'23:30', name:'睡觉', desc:'23:30 前入睡', tag:'节律'},
+  {time:'10:00', name:'Horizon AI 新闻雷达', desc:'每日更新（自动）', tag:'自动'},
+  {time:'11:00', name:'WorkBuddy 积分补领', desc:'每日领取（自动）', tag:'自动'},
 ];
 function _schedTime(t){ if(/^\d{1,2}:\d{2}$/.test(t)){ const [h,m]=t.split(':').map(Number); return h*60+m; } return t==='每日'?-1:9999; }
 function toggleScheduled(idx){
@@ -2613,7 +2609,7 @@ PAGES.scheduled=function(){
       <div id="schedList"></div>
     </div>
     <div class="card"><div class="card-title"><span class="ico">💡</span>说明</div>
-      <div style="font-size:12.5px;color:#5A5470;line-height:1.9">自动任务：Horizon 10:00 / WorkBuddy 11:00 由定时任务自动跑，这里做展示；习惯任务：每日打卡后点 ✓。完成情况每晚收工由 Codex 汇总进复盘。</div>
+      <div style="font-size:12.5px;color:#5A5470;line-height:1.9">这里只放自动化固定任务（由定时任务自动执行），每日习惯（多邻国/阅读/简报/运动/睡觉）在「今日计划」与每日打卡中记录，不在此重复。</div>
     </div>
   </div>`;
 }
